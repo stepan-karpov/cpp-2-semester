@@ -1,8 +1,8 @@
 # Репозиторий для сдачи заданий по предмету C++
 
 # Прогресс по задачам
-- deque - *на ревью*
-- list
+- deque - на ревью
+- list - на ревью
 - shared_ptr
 - unordered_map
 - variant
@@ -13,5 +13,5 @@
 
 # Команда для проверки на кодстайл
 ```
- clang-format deque.h > a.out; diff a.out deque.h > to_beautify.out; rm a.out
+clang-format deque.h > a.out; diff a.out deque.h > to_beautify.out; rm a.out
 ```
