@@ -913,14 +913,14 @@ class UnorderedMap {
     try {
       /*
         Yes, this function is very controversial.
-        I've tried to get red of this poor code, but every time
+        I've tried to get rid of this poor code, but every time
         I did so, I had CE on the last test (because somehow a wrong allocator
-        call a constructor of object)
-        I'm not sure I'm able to fix it (even on review), so I 
+        calls a constructor of object)
+        I'm not sure I'll able to fix it (even on review), so I 
         really hope that you'll let me keep it
       */
      
-      // start of COSTYL
+      // ------ start of COSTYL ------
       auto temp = main_list_.AllocNode();
 
       using PairAlloc = typename std::allocator_traits<typename ListType::NodeAlloc>::template rebind_alloc<NodeType>;
