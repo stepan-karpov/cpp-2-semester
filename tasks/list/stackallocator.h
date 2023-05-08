@@ -3,6 +3,9 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include <vector>
+#include <stdexcept>
+#include <cmath>
 
 template <size_t N>
 class StackStorage {
@@ -98,20 +101,32 @@ bool operator==(const StackAllocator<T, N>& a, const StackAllocator<T, N>& b) {
   return a.storage == b.storage;
 }
 
+
 template <typename T, typename Alloc = std::allocator<T>>
 class List {
- private:
+ public:
   size_t capacity = 0;
-
   struct Node;
+  struct BaseNode;
+
+  using TAlloc = 
+      typename std::allocator_traits<Alloc>::template rebind_alloc<T>;
+  using NodeAlloc =
+      typename std::allocator_traits<Alloc>::template rebind_alloc<Node>;
+  using BaseNodeAlloc =
+      typename std::allocator_traits<Alloc>::template rebind_alloc<BaseNode>;
+
 
   struct BaseNode {
     BaseNode* prev = nullptr;
     BaseNode* next = nullptr;
-    BaseNode() = default;
+    BaseNode() {
+      prev = this;
+      next = this;
+    };
     BaseNode(BaseNode* prev, BaseNode* next)
-        : prev(prev),
-          next(next){};
+      : prev(prev),
+        next(next){};
   };
 
   struct Node : BaseNode {
@@ -120,22 +135,22 @@ class List {
     Node(const T& value)
         : value(value) {
     }
-    Node(BaseNode* prev, BaseNode* next, const T& value)
-        : BaseNode(prev, next),
-          value(value) {
-    }
     Node(BaseNode* prev, BaseNode* next)
-        : BaseNode(prev, next) {
+      : BaseNode(prev, next) {
+    }
+    template <typename... Args>
+    Node(BaseNode* prev, BaseNode* next, Args&&... args)
+      : BaseNode(prev, next),
+        value(std::forward<Args>(args)...) {
     }
   };
 
-  using NodeAlloc =
-      typename std::allocator_traits<Alloc>::template rebind_alloc<Node>;
-  using BaseNodeAlloc =
-      typename std::allocator_traits<Alloc>::template rebind_alloc<BaseNode>;
+  using NodeAllocTraits = typename std::allocator_traits<NodeAlloc>;
+  using BaseNodeAllocTraits = typename std::allocator_traits<BaseNode>;
 
   NodeAlloc node_alloc;
   BaseNodeAlloc basenode_alloc;
+  TAlloc t_alloc;
 
   BaseNode* fake_node;
 
@@ -211,7 +226,9 @@ class List {
       return *this;
     }
     operator Iterator<true>() const {
-      return Iterator<true>();
+      Iterator<true> tmp;
+      tmp.node = node;
+      return tmp;
     }
   };
 
@@ -240,14 +257,12 @@ class List {
   iterator end() {
     return iterator(2, fake_node);
   }
-
   const_iterator begin() const {
     return const_iterator(1, fake_node);
   }
   const_iterator end() const {
     return const_iterator(2, fake_node);
   }
-
   const_iterator cbegin() const {
     return const_iterator(1, fake_node);
   }
@@ -288,15 +303,15 @@ class List {
     if constexpr (std::is_default_constructible<T>()) {
       for (int i = 0; i < new_capacity; ++i) {
         Node* new_node =
-            std::allocator_traits<NodeAlloc>::allocate(node_alloc, 1);
+            NodeAllocTraits::allocate(node_alloc, 1);
         try {
-          std::allocator_traits<NodeAlloc>::construct(node_alloc, new_node,
+          NodeAllocTraits::construct(node_alloc, new_node,
                                                       prev, nullptr);
           allocated.push_back(new_node);
         } catch (...) {
           for (int j = 0; j < i; ++j) {
-            std::allocator_traits<NodeAlloc>::destroy(node_alloc, allocated[j]);
-            std::allocator_traits<NodeAlloc>::deallocate(node_alloc,
+            NodeAllocTraits::destroy(node_alloc, allocated[j]);
+            NodeAllocTraits::deallocate(node_alloc,
                                                          allocated[j], 1);
           }
           std::allocator_traits<BaseNodeAlloc>::destroy(basenode_alloc,
@@ -314,6 +329,11 @@ class List {
     } else {
       throw std::string("no default constructor for this type!! durak");
     }
+  }
+
+  Node* AllocNode() {
+    Node* new_node = NodeAllocTraits::allocate(node_alloc, 1);
+    return new_node;
   }
 
   List(const Alloc& init_allocator)
@@ -349,7 +369,7 @@ class List {
 
   List(const List& init) {
     node_alloc =
-        std::allocator_traits<NodeAlloc>::select_on_container_copy_construction(
+        NodeAllocTraits::select_on_container_copy_construction(
             init.node_alloc);
     basenode_alloc = std::allocator_traits<BaseNodeAlloc>::
         select_on_container_copy_construction(init.basenode_alloc);
@@ -359,15 +379,15 @@ class List {
     std::vector<Node*> allocated;
     for (size_t i = 0; i < init.capacity; ++i) {
       Node* new_node =
-          std::allocator_traits<NodeAlloc>::allocate(node_alloc, 1);
+          NodeAllocTraits::allocate(node_alloc, 1);
       try {
-        std::allocator_traits<NodeAlloc>::construct(node_alloc, new_node, prev,
+        NodeAllocTraits::construct(node_alloc, new_node, prev,
                                                     nullptr, *it);
         allocated.push_back(new_node);
       } catch (...) {
         for (int j = 0; j < i; ++j) {
-          std::allocator_traits<NodeAlloc>::destroy(node_alloc, allocated[j]);
-          std::allocator_traits<NodeAlloc>::deallocate(node_alloc, allocated[j],
+          NodeAllocTraits::destroy(node_alloc, allocated[j]);
+          NodeAllocTraits::deallocate(node_alloc, allocated[j],
                                                        1);
         }
         std::allocator_traits<BaseNodeAlloc>::destroy(basenode_alloc,
@@ -383,6 +403,21 @@ class List {
     prev->next = fake_node;
     fake_node->prev = prev;
     capacity = init.capacity;
+  }
+
+  List(List&& init) 
+    : capacity(std::move(init.capacity)),
+      node_alloc(std::move(init.node_alloc)),
+      basenode_alloc(std::move(init.basenode_alloc)),
+      fake_node(std::move(init.fake_node)) {
+    init.capacity = 0;
+    init.fake_node = nullptr;
+  }
+
+  List& operator=(List&& init) {
+    List new_list(std::move(init));
+    swap(new_list);
+    return *this;
   }
 
   List(int new_capacity) {
@@ -430,10 +465,10 @@ class List {
   }
 
   void push_back(const T& value) {
-    insert(end(), value);
+    emplace(end(), value);
   }
   void push_front(const T& value) {
-    insert(begin(), value);
+    emplace(begin(), value);
   }
   void pop_front() {
     erase(begin());
@@ -450,36 +485,52 @@ class List {
     return capacity;
   }
 
-  void insert(const iterator& it, const T& value) {
-    if (capacity == 0) {
-      Node* new_node =
-          std::allocator_traits<NodeAlloc>::allocate(node_alloc, 1);
-      std::allocator_traits<NodeAlloc>::construct(node_alloc, new_node,
-                                                  fake_node, fake_node, value);
-
-      fake_node->next = dynamic_cast<BaseNode*>(new_node);
-      fake_node->prev = dynamic_cast<BaseNode*>(new_node);
-      ++capacity;
-      return;
-    }
-    BaseNode* prev_node = (it.node)->prev;
-    BaseNode* next_node = it.node;
-    Node* new_node = std::allocator_traits<NodeAlloc>::allocate(node_alloc, 1);
-    std::allocator_traits<NodeAlloc>::construct(node_alloc, new_node, prev_node,
-                                                next_node, value);
-    prev_node->next = new_node;
-    next_node->prev = new_node;
-    ++capacity;
+  void ChangeForwardLink(iterator& node_to_change, iterator& node_to_point) {
+    node_to_change.node->next = node_to_point.node;
   }
 
-  // I don't know how to make insert by const_iterator
-  // and by iterator without copy-paste
+  void ChangeBackLink(iterator& node_to_change, iterator& node_to_point) {
+    node_to_change.node->prev = node_to_point.node;
+  }
+
   void insert(const const_iterator& it, const T& value) {
+    emplace(it, value);
+  }
+
+  void insert(const const_iterator& it, T&& value) {
+    emplace(it, std::move(value));
+  }
+
+  // initializes new node with 'args' parameters
+  // and inserts new node before 'it' iterator
+  template <typename... Args>
+  void emplace(const const_iterator& it, Args&&... args) {
     if (capacity == 0) {
+
       Node* new_node =
-          std::allocator_traits<NodeAlloc>::allocate(node_alloc, 1);
-      std::allocator_traits<NodeAlloc>::construct(node_alloc, new_node,
-                                                  fake_node, fake_node, value);
+          NodeAllocTraits::allocate(node_alloc, 1);
+      NodeAllocTraits::construct(node_alloc, new_node,
+                                                  fake_node, fake_node, std::forward<Args>(args)...);
+      
+      fake_node->next = dynamic_cast<BaseNode*>(new_node);
+      fake_node->prev = dynamic_cast<BaseNode*>(new_node);
+      ++capacity;
+      return;
+    }
+    BaseNode* prev_node = (it.node)->prev;
+    BaseNode* next_node = it.node;
+    Node* new_node = NodeAllocTraits::allocate(node_alloc, 1);
+    NodeAllocTraits::construct(node_alloc, new_node,
+                                                prev_node, next_node, std::forward<Args>(args)...);
+    prev_node->next = new_node;
+    next_node->prev = new_node;
+    ++capacity;
+  }
+
+  void emplaceForUM(const const_iterator& it, Node* new_node) {
+    if (capacity == 0) {
+      new_node->prev = fake_node;
+      new_node->next = fake_node;
 
       fake_node->next = dynamic_cast<BaseNode*>(new_node);
       fake_node->prev = dynamic_cast<BaseNode*>(new_node);
@@ -488,40 +539,24 @@ class List {
     }
     BaseNode* prev_node = (it.node)->prev;
     BaseNode* next_node = it.node;
-    Node* new_node = std::allocator_traits<NodeAlloc>::allocate(node_alloc, 1);
-    std::allocator_traits<NodeAlloc>::construct(node_alloc, new_node, prev_node,
-                                                next_node, value);
+
+    new_node->prev = prev_node;
+    new_node->next = next_node;
     prev_node->next = new_node;
     next_node->prev = new_node;
     ++capacity;
   }
 
-  void erase(const iterator& it) {
-    if (capacity == 0) {
-      throw std::string("what do you want to delete??? durak");
-    }
-    BaseNode* prev_node = (it.node)->prev;
-    BaseNode* next_node = (it.node)->next;
-    std::allocator_traits<NodeAlloc>::destroy(node_alloc,
-                                              static_cast<Node*>(it.node));
-    std::allocator_traits<NodeAlloc>::deallocate(
-        node_alloc, static_cast<Node*>(it.node), 1);
-    prev_node->next = next_node;
-    next_node->prev = prev_node;
-    --capacity;
-  }
 
-  // I don't know how to make erase by const_iterator
-  // and by iterator without copy-paste
   void erase(const const_iterator& it) {
     if (capacity == 0) {
       throw std::string("what do you want to delete??? durak");
     }
     BaseNode* prev_node = (it.node)->prev;
     BaseNode* next_node = (it.node)->next;
-    std::allocator_traits<NodeAlloc>::destroy(node_alloc,
+    NodeAllocTraits::destroy(node_alloc,
                                               static_cast<Node*>(it.node));
-    std::allocator_traits<NodeAlloc>::deallocate(
+    NodeAllocTraits::deallocate(
         node_alloc, static_cast<Node*>(it.node), 1);
     prev_node->next = next_node;
     next_node->prev = prev_node;

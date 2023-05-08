@@ -1,12 +1,18 @@
 # Репозиторий для сдачи заданий по предмету C++
 
 # Прогресс по задачам
-- deque
-- list
-- shared_ptr
+- deque - на ревью
+- list - на ревью
 - unordered_map
+- shared_ptr
 - variant
 
 
 # Полезные ссылки
 - [Таблица с результатами](https://docs.google.com/spreadsheets/d/1stlHqG1o7f2N1gPj7SgvM253V6KVPlMteuiUVfbnfjk/edit#gid=1167867899)
+
+# Команда для проверки на кодстайл
+```
+clang-format deque.h > a.out; diff a.out deque.h > to_beautify.out; rm a.out
+clang-format unordered_map.h > a.out; diff a.out unordered_map.h > to_beautify.out; rm a.out
+```
