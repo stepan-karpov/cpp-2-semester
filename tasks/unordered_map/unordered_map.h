@@ -828,15 +828,8 @@ class UnorderedMap {
   }
 
   const_iterator find(const Key& key) const {
-    size_t current_bucket = find_hash_(key) % bucket_number_;
-    auto it = Iterator<true>(buckets_[current_bucket]);
-    while (it != end() && it.it->hash == current_bucket) {
-      if (is_equal_(key, it->first)) {
-        return it;
-      }
-      ++it;
-    }
-    return end();
+    UnorderedMap* temp = this;
+    return find(temp);
   }
 
   template <class InputIt>
@@ -921,21 +914,21 @@ class UnorderedMap {
       */
      
       // ------ start of COSTYL ------
-      auto temp = main_list_.AllocNode();
+      // auto temp = main_list_.AllocNode();
 
-      using PairAlloc = typename std::allocator_traits<typename ListType::NodeAlloc>::template rebind_alloc<NodeType>;
-      PairAlloc p_alloc = PairAlloc();
+      // using PairAlloc = typename std::allocator_traits<typename ListType::NodeAlloc>::template rebind_alloc<NodeType>;
+      // PairAlloc p_alloc = PairAlloc();
 
 
-      std::allocator_traits<PairAlloc>::construct(p_alloc, &(temp->value.kv), 
-                  std::forward<Args>(args)...);
+      // std::allocator_traits<PairAlloc>::construct(p_alloc, &(temp->value.kv), 
+      //             std::forward<Args>(args)...);
                 
-      temp->value.hash = 0;
-      main_list_.emplaceForUM(main_list_.begin(), temp);
+      // temp->value.hash = 0;
+      // main_list_.emplaceForUM(main_list_.begin(), temp);
       // ---- end of COSTYL -------
 
       // this should be a proper line, but it fails
-      // main_list_.emplace(main_list_.begin(), std::forward<Args>(args)..., 0);
+      main_list_.emplace(main_list_.begin(), std::forward<Args>(args)..., 0);
 
       int bucket_to_insert = find_hash_(main_list_.begin()->kv.first) % bucket_number_;
       main_list_.begin()->hash = bucket_to_insert;
