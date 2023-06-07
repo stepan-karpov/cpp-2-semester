@@ -916,7 +916,7 @@ class UnorderedMap {
         I've tried to get rid of this poor code, but every time
         I did so, I had CE on the last test (because somehow a wrong allocator
         calls a constructor of object)
-        I'm not sure I'll able to fix it (even on review), so I 
+        I'm not sure I'll be able to fix it (even on review), so I 
         really hope that you'll let me keep it
       */
      
@@ -1020,28 +1020,7 @@ class UnorderedMap {
     rehash(std::ceil(count / max_load_factor()));
   }
 
-  void DebugOutput() {
-    std::cout << buckets_ << "\n";
-    for (int i = 0; i < bucket_number_; ++i) {
-      if (buckets_[i] == main_list_.end()) {
-        std::cout << "end ";
-      } else {
-        std::cout << buckets_[i]->kv.first << " ";
-      }
-    }
-    std::cout << "\n";
-    for (int i = 0; i < bucket_number_; ++i) {
-      std::cout << i << ": ";
-      auto it = Iterator<false>(buckets_[i]);
-      while (it != end() && it.it->hash == i) {
-        std::cout << it->first << " ";
-        ++it;
-      }
-      std::cout << "\n";
-    }
-    std::cout << "\n";
-  }
- public:
+ private:
   void AllocateBuckets(int number) {
     bucket_number_ = number;
     buckets_ = std::allocator_traits<BucketAlloc>::allocate(bucket_alloc, number);
