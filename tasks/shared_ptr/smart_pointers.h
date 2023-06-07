@@ -35,7 +35,6 @@ struct ControlBlockRegular : public BaseControlBlock {
   T* object = nullptr;
   Deleter deleter;
   Alloc allocator;
-  bool allocator_used = false;
 
   template <typename... Args>
   ControlBlockRegular(int shared_count, int weak_count, Deleter deleter, Args&&... args)
@@ -48,8 +47,7 @@ struct ControlBlockRegular : public BaseControlBlock {
   : BaseControlBlock(shared_count, weak_count),
     object(object),
     deleter(deleter),
-    allocator(allocator),
-    allocator_used(true) {
+    allocator(allocator) {
   }
 
   template <typename... Args>
@@ -60,21 +58,13 @@ struct ControlBlockRegular : public BaseControlBlock {
   }
 
   virtual void DeleteObject(void* ptr) {
-    if (!allocator_used) {
-      deleter(static_cast<T*>(ptr));
-    } else {
-      // deleter(&object);
-      std::allocator_traits<Alloc>::destroy(allocator, &object);
-      // std::allocator_traits<Alloc>::deallocate(allocator, &object, 1);
-    }
+    deleter(static_cast<T*>(ptr));
   }
 
   virtual void DeallocateItself() {
-    if (allocator_used) {
-      using AllocControlBlock = typename std::allocator_traits<Alloc>:: template rebind_alloc<ControlBlockRegular<T, Deleter, Alloc>>;
-      AllocControlBlock new_alloc = allocator;
-      std::allocator_traits<AllocControlBlock>::deallocate(new_alloc, this, 1);
-    }
+    using AllocControlBlock = typename std::allocator_traits<Alloc>:: template rebind_alloc<ControlBlockRegular<T, Deleter, Alloc>>;
+    AllocControlBlock new_alloc = allocator;
+    std::allocator_traits<AllocControlBlock>::deallocate(new_alloc, this, 1);
   }
 };
 
@@ -82,41 +72,34 @@ template <typename T, typename Alloc = std::allocator<T>>
 struct ControlBlockMakeShared : public BaseControlBlock {
   T object;
   Alloc allocator;
-  bool alloc_used = false;
 
   template <typename... Args>
   ControlBlockMakeShared(int shared_count, int weak_count, Alloc& allocator, Args&&... args)
     : BaseControlBlock(shared_count, weak_count),
       object(std::forward<Args>(args)...),
-      allocator(allocator),
-      alloc_used(true) {}
+      allocator(allocator) {
+  }
 
   template <typename... Args>
   ControlBlockMakeShared(int shared_count, int weak_count, Args&&... args)
     : BaseControlBlock(shared_count, weak_count),
-      object(std::forward<Args>(args)...) {}
+      object(std::forward<Args>(args)...) {      
+  }
 
   ~ControlBlockMakeShared() {
-    if (alloc_used) {
-    } else {
-
-    }
   }
 
   virtual void DeleteObject(void* ptr) {
-    if (alloc_used) {
-      std::allocator_traits<Alloc>::destroy(allocator, &object);
-    } else {
-      static_cast<T*>(ptr)->~T();
+    std::allocator_traits<Alloc>::destroy(allocator, &object);
+    if (ptr == nullptr) {
+      std::allocator_traits<Alloc>::destroy(allocator, &ptr);
     }
   }
 
   virtual void DeallocateItself() {
-    if (alloc_used) {
-      using AllocControlBlock = typename std::allocator_traits<Alloc>:: template rebind_alloc<ControlBlockMakeShared<T, Alloc>>;
-      AllocControlBlock new_alloc = allocator;
-      std::allocator_traits<AllocControlBlock>::deallocate(new_alloc, this, 1);
-    }
+    using AllocControlBlock = typename std::allocator_traits<Alloc>:: template rebind_alloc<ControlBlockMakeShared<T, Alloc>>;
+    AllocControlBlock new_alloc = allocator;
+    std::allocator_traits<AllocControlBlock>::deallocate(new_alloc, this, 1);
   }
 };
 
@@ -150,21 +133,12 @@ class SharedPtr {
   SharedPtr(T* ptr, Deleter deleter, Alloc allocator)
     : control_block(nullptr),
       allocator_used(true) {
-    // static int s = 0;
-    // ++s;
-    // std::cout << s << "\n";
-    // auto temp = static_cast<BaseControlBlock*>(new ControlBlockRegular<T, Deleter, Alloc>(1, 0, deleter, allocator, ptr));
-    // control_block = temp;
-    
+
     using AllocControlBlock = typename std::allocator_traits<Alloc>:: template rebind_alloc<ControlBlockRegular<T, Deleter, Alloc>>;
     AllocControlBlock new_alloc = allocator;
     auto control_block_pointer = std::allocator_traits<AllocControlBlock>::allocate(new_alloc, 1);
-    // std::allocator_traits<AllocControlBlock>::construct(new_alloc, control_block_pointer, 1, 0, deleter, allocator, ptr);
-    // std::allocator_traits<AllocControlBlock>::destroy(new_alloc, control_block_pointer);
     std::allocator_traits<AllocControlBlock>::deallocate(new_alloc, control_block_pointer, 1);
     deleter(static_cast<T*>(nullptr));
-    // control_block = control_block_pointer;
-    // static_cast<ControlBlockRegular<T, Deleter, Alloc>*>(control_block)->object = ptr;
     object = ptr;
   } 
 
@@ -218,7 +192,7 @@ class SharedPtr {
         allocator_used(other.allocator_used) {
     other.control_block = nullptr;
     other.object = nullptr;
-  } //
+  }
 
   SharedPtr(const SharedPtr& other) 
     : object(other.object),
@@ -253,22 +227,18 @@ class SharedPtr {
   }
 
   T& operator*() {
-    if (control_block == nullptr) { throw std::string("wrong iterator dereference!!! durak"); }
     return *static_cast<ControlBlockRegular<T>*>(control_block)->object;
   }
 
   const T& operator*() const {
-    if (control_block == nullptr) { throw std::string("wrong iterator dereference!!! durak"); }
     return *static_cast<ControlBlockRegular<T>*>(control_block)->object;
   }
   
   T* operator->() {
-    if (control_block == nullptr) { throw std::string("wrong iterator dereference!!! durak"); }
     return static_cast<ControlBlockRegular<T>*>(control_block)->object;
   }
 
   const T* operator->() const {
-    if (control_block == nullptr) { throw std::string("wrong iterator dereference!!! durak"); }
     return static_cast<ControlBlockRegular<T>*>(control_block)->object;
   }
 
@@ -437,14 +407,3 @@ class WeakPtr {
     return SharedPtr<T>(control_block, object);
   }
 };
-
-// template <typename T>
-// class EnableSharedFromThis {
-//  private:
-//   WeakPtr<T> weak_ptr = nullptr;
-
-//  public:
-//   SharedPtr<T> shared_from_this() const {
-//     return weak_ptr.lock();
-//   }
-// };
