@@ -160,19 +160,13 @@ class List {
     using value_type = T;
     using reference = std::conditional_t<is_constant, const T&, T&>;
     using pointer = std::conditional_t<is_constant, const T*, T*>;
-    using stor_type = std::conditional<is_constant, const BaseNode*, BaseNode*>;
+    using store_type = std::conditional<is_constant, const BaseNode*, BaseNode*>;
     using difference_type = ptrdiff_t;
     BaseNode* node = nullptr;
 
     Iterator() = default;
 
-    // code == 1 -> list.begin()
-    // code == 2 -> list.end()
-    Iterator(int code, BaseNode* fake_node) {
-      if (code == 1) {
-        node = fake_node->next;
-        return;
-      }
+    Iterator(BaseNode* fake_node) {
       node = fake_node;
     }
 
@@ -181,11 +175,7 @@ class List {
     }
 
     reference operator*() const {
-      try {
-        return static_cast<Node*>(node)->value;
-      } catch (...) {
-        throw std::string("wrong iterator dereference!!! durak");
-      }
+      return static_cast<Node*>(node)->value;
     }
 
     pointer operator->() const {
@@ -232,10 +222,10 @@ class List {
     }
   };
 
-  typedef Iterator<false> iterator;
-  typedef Iterator<true> const_iterator;
-  typedef std::reverse_iterator<iterator> reverse_iterator;
-  typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+  using iterator = Iterator<false>;
+  using const_iterator = Iterator<true>;
+  using reverse_iterator = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   friend iterator operator-(iterator it, int value) {
     for (int i = 0; i < value; ++i) {
@@ -252,22 +242,26 @@ class List {
   }
 
   iterator begin() {
-    return iterator(1, fake_node);
+    iterator temp(fake_node);
+    temp.node = fake_node->next;
+    return temp;
   }
   iterator end() {
-    return iterator(2, fake_node);
+    return iterator(fake_node);
   }
   const_iterator begin() const {
-    return const_iterator(1, fake_node);
+    const_iterator temp(fake_node);
+    temp.node = fake_node->next;
+    return temp;
   }
   const_iterator end() const {
-    return const_iterator(2, fake_node);
+    return const_iterator(fake_node);
   }
   const_iterator cbegin() const {
-    return const_iterator(1, fake_node);
+    return begin();
   }
   const_iterator cend() const {
-    return const_iterator(2, fake_node);
+    return end();
   }
 
   reverse_iterator rbegin() {
@@ -300,35 +294,31 @@ class List {
   void AllocateInit(int new_capacity) {
     BaseNode* prev = fake_node;
     std::vector<Node*> allocated;
-    if constexpr (std::is_default_constructible<T>()) {
-      for (int i = 0; i < new_capacity; ++i) {
-        Node* new_node =
-            NodeAllocTraits::allocate(node_alloc, 1);
-        try {
-          NodeAllocTraits::construct(node_alloc, new_node,
-                                                      prev, nullptr);
-          allocated.push_back(new_node);
-        } catch (...) {
-          for (int j = 0; j < i; ++j) {
-            NodeAllocTraits::destroy(node_alloc, allocated[j]);
-            NodeAllocTraits::deallocate(node_alloc,
-                                                         allocated[j], 1);
-          }
-          std::allocator_traits<BaseNodeAlloc>::destroy(basenode_alloc,
-                                                        fake_node);
-          std::allocator_traits<BaseNodeAlloc>::deallocate(basenode_alloc,
-                                                           fake_node, 1);
-          throw;
+    for (int i = 0; i < new_capacity; ++i) {
+      Node* new_node =
+          NodeAllocTraits::allocate(node_alloc, 1);
+      try {
+        NodeAllocTraits::construct(node_alloc, new_node,
+                                                    prev, nullptr);
+        allocated.push_back(new_node);
+      } catch (...) {
+        for (int j = 0; j < i; ++j) {
+          NodeAllocTraits::destroy(node_alloc, allocated[j]);
+          NodeAllocTraits::deallocate(node_alloc,
+                                                        allocated[j], 1);
         }
-        prev->next = new_node;
-        prev = dynamic_cast<BaseNode*>(new_node);
+        std::allocator_traits<BaseNodeAlloc>::destroy(basenode_alloc,
+                                                      fake_node);
+        std::allocator_traits<BaseNodeAlloc>::deallocate(basenode_alloc,
+                                                          fake_node, 1);
+        throw;
       }
-      prev->next = fake_node;
-      fake_node->prev = prev;
-      capacity = new_capacity;
-    } else {
-      throw std::string("no default constructor for this type!! durak");
+      prev->next = new_node;
+      prev = dynamic_cast<BaseNode*>(new_node);
     }
+    prev->next = fake_node;
+    fake_node->prev = prev;
+    capacity = new_capacity;
   }
 
   Node* AllocNode() {
@@ -354,12 +344,8 @@ class List {
         basenode_alloc(init_allocator) {
     InitFakeNode();
 
-    if constexpr (std::is_default_constructible<T>()) {
-      for (int i = 0; i < new_capacity; ++i) {
-        push_back(value);
-      }
-    } else {
-      throw std::string("no default constructor for this type!! durak ");
+    for (int i = 0; i < new_capacity; ++i) {
+      push_back(value);
     }
   }
 
@@ -428,12 +414,8 @@ class List {
   List(int new_capacity, const T& value) {
     InitFakeNode();
 
-    if constexpr (std::is_default_constructible<T>()) {
-      for (int i = 0; i < new_capacity; ++i) {
-        push_back(value);
-      }
-    } else {
-      throw std::string("no default constructor for this type!! durak ");
+    for (int i = 0; i < new_capacity; ++i) {
+      push_back(value);
     }
   }
 
@@ -527,31 +509,7 @@ class List {
     ++capacity;
   }
 
-  void emplaceForUM(const const_iterator& it, Node* new_node) {
-    if (capacity == 0) {
-      new_node->prev = fake_node;
-      new_node->next = fake_node;
-
-      fake_node->next = dynamic_cast<BaseNode*>(new_node);
-      fake_node->prev = dynamic_cast<BaseNode*>(new_node);
-      ++capacity;
-      return;
-    }
-    BaseNode* prev_node = (it.node)->prev;
-    BaseNode* next_node = it.node;
-
-    new_node->prev = prev_node;
-    new_node->next = next_node;
-    prev_node->next = new_node;
-    next_node->prev = new_node;
-    ++capacity;
-  }
-
-
   void erase(const const_iterator& it) {
-    if (capacity == 0) {
-      throw std::string("what do you want to delete??? durak");
-    }
     BaseNode* prev_node = (it.node)->prev;
     BaseNode* next_node = (it.node)->next;
     NodeAllocTraits::destroy(node_alloc,
