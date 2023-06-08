@@ -126,10 +126,10 @@ class Deque {
 
    public:
     using value_type = T;
-    using stor_type = std::conditional<is_constant, const T**, T**>;
     using pointer = std::conditional_t<is_constant, const T*, T*>;
     using reference = std::conditional_t<is_constant, const T&, T&>;
     using difference_type = ptrdiff_t;
+    using iterator_category = std::random_access_iterator_tag;
 
     Iterator(size_t position, T** object_chain)
         : position(position),
@@ -237,7 +237,7 @@ class Deque {
       return Iterator<true>(position, object_chain);
     }
 
-    friend void Deque::insert(Iterator<false> it, const T& value);
+    friend void Deque::insert(Iterator<false> it, T value);
     friend void Deque::erase(Iterator<false> it);
   };
 
@@ -279,8 +279,7 @@ class Deque {
     return std::reverse_iterator(cbegin());
   }
 
-  void insert(iterator it, const T& value) {
-    T current_value = value;
+  void insert(iterator it, T current_value) {
     while (it != this->end()) {
       std::swap(current_value, *(it));
       ++it;
@@ -305,7 +304,6 @@ class Deque {
       chain_array[i] = allocate_raw_memory();
     }
 
-    // if constexpr (std::is_default_constructible<T>()) {
     try {
       first_element = 0;
       for (size_t i = 0; i < new_size; ++i) {
@@ -319,7 +317,6 @@ class Deque {
       first_element = -1;
       throw;
     }
-    // }
   }
 
   Deque(size_t new_size, const T& value)
