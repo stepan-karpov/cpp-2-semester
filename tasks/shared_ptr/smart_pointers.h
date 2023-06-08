@@ -37,13 +37,6 @@ namespace detail {
     Deleter deleter;
     Alloc allocator;
 
-    template <typename... Args>
-    ControlBlockRegular(int shared_count, int weak_count, Deleter deleter, Args&&... args)
-    : BaseControlBlock(shared_count, weak_count),
-      object(std::forward<Args>(args)...),
-      deleter(deleter) {
-    }
-
     ControlBlockRegular(int shared_count, int weak_count, Deleter deleter, Alloc& allocator, T* object)
     : BaseControlBlock(shared_count, weak_count),
       object(object),
@@ -52,10 +45,9 @@ namespace detail {
     }
 
     template <typename... Args>
-    ControlBlockRegular(int shared_count, int weak_count, Args&&... args)
+    ControlBlockRegular(int shared_count, int weak_count)
     : BaseControlBlock(shared_count, weak_count),
-      object(std::forward<Args>(args)...),
-      deleter(std::default_delete<T>()) {
+      object(nullptr) {
     }
 
     virtual void DeleteObject(void* ptr) {
@@ -122,28 +114,14 @@ class SharedPtr {
       control_block(nullptr) {
   }
 
-  explicit SharedPtr(T* ptr) 
-  : control_block(static_cast<detail::BaseControlBlock*>(new detail::ControlBlockRegular<T>(1, 0, nullptr))) {
-    static_cast<detail::ControlBlockRegular<T>*>(control_block)->object = ptr;
-    object = ptr;
-  } 
-
-  template <typename Deleter>
-  SharedPtr(T* ptr, Deleter deleter) : control_block(static_cast<detail::BaseControlBlock*>(new detail::ControlBlockRegular<T, Deleter>(1, 0, deleter, nullptr))) {
-    static_cast<detail::ControlBlockRegular<T, Deleter>*>(control_block)->object = ptr;
-    object = ptr;
-  } 
-
-  template <typename Deleter, typename Alloc>
-  SharedPtr(T* ptr, Deleter deleter, Alloc allocator)
+  template <typename Deleter = std::default_delete<T>, typename Alloc = std::allocator<T>>
+  SharedPtr(T* ptr, Deleter deleter = Deleter(), Alloc allocator = Alloc())
     : control_block(nullptr) {
-
     using AllocControlBlock = typename std::allocator_traits<Alloc>:: template rebind_alloc<detail::ControlBlockRegular<T, Deleter, Alloc>>;
     AllocControlBlock new_alloc = allocator;
-    auto control_block_pointer = std::allocator_traits<AllocControlBlock>::allocate(new_alloc, 1);
-    std::allocator_traits<AllocControlBlock>::deallocate(new_alloc, control_block_pointer, 1);
-    deleter(static_cast<T*>(nullptr));
-    object = ptr;
+    control_block = std::allocator_traits<AllocControlBlock>::allocate(new_alloc, 1);
+    new (control_block) detail::ControlBlockRegular(1, 0, deleter, allocator, ptr);
+    object = ptr; 
   }
 
   
@@ -334,7 +312,7 @@ class WeakPtr {
 
   WeakPtr()
     : object(nullptr),
-      control_block(static_cast<detail::BaseControlBlock*>(new detail::ControlBlockRegular<T>(1, 0))) {
+      control_block(new detail::ControlBlockRegular<T>(1, 0)) {
   }
 
   WeakPtr(const SharedPtr<T>& shared_pointer) 
