@@ -8,6 +8,12 @@
 template <typename T>
 class Deque {
  private:
+  static const size_t CHUNK_SIZE = 32;
+  size_t chain_size = 0;
+  T** chain_array = nullptr;
+  size_t deque_size = 0;
+  int first_element = 0;
+
   void DeleteElements() {
     for (size_t i = 0; i < deque_size; ++i) {
       (chain_array[row(i + first_element)] + column(i + first_element))->~T();
@@ -102,13 +108,6 @@ class Deque {
     DeleteElements();
     DeleteChunks();
   }
-
-  static const size_t CHUNK_SIZE = 32;
-  size_t chain_size = 0;
-  T** chain_array = nullptr;
-  size_t deque_size = 0;
-  int first_element = 0;
-
  public:
   static size_t row(size_t index) {
     return index / CHUNK_SIZE;
@@ -123,6 +122,8 @@ class Deque {
    private:
     size_t position;
     T** object_chain;
+    T* object_row = nullptr;
+    size_t chain_size;
 
    public:
     using value_type = T;
@@ -131,22 +132,33 @@ class Deque {
     using difference_type = ptrdiff_t;
     using iterator_category = std::random_access_iterator_tag;
 
-    Iterator(size_t position, T** object_chain)
+    Iterator(size_t position, T** object_chain, size_t chain_size)
         : position(position),
-          object_chain(object_chain) {
+          object_chain(object_chain),
+          object_row(nullptr),
+          chain_size(chain_size) {
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
     }
 
     Iterator() = default;
 
     reference operator*() const {
-      return *(object_chain[row(position)] + column(position));
+      return *(object_row + column(position));
     }
+
     pointer operator->() const {
-      return object_chain[row(position)] + column(position);
+      return object_row + column(position);
     }
 
     Iterator& operator++() {
       ++position;
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
       return *this;
     }
 
@@ -158,6 +170,10 @@ class Deque {
 
     Iterator& operator--() {
       --position;
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
       return *this;
     }
 
@@ -193,21 +209,37 @@ class Deque {
 
     Iterator& operator-=(difference_type delta) {
       position -= delta;
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
       return *this;
     }
 
     Iterator& operator+=(difference_type delta) {
       position += delta;
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
       return *this;
     }
 
     Iterator& operator-=(const Iterator& it) {
       position -= it.position;
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
       return *this;
     }
 
     Iterator& operator+=(const Iterator& it) {
       position += it.position;
+      int current_row = row(position);
+      if (object_chain != nullptr && 0 <= current_row && current_row < int(chain_size)) {
+        object_row = object_chain[current_row];
+      }
       return *this;
     }
 
@@ -217,11 +249,19 @@ class Deque {
 
     friend Iterator operator+(Iterator other, difference_type delta) {
       other.position += delta;
+      int current_row = row(other.position);
+      if (other.object_chain != nullptr && 0 <= current_row && current_row < int(other.chain_size)) {
+        other.object_row = other.object_chain[current_row];
+      }
       return other;
     }
 
     friend Iterator operator-(Iterator other, difference_type delta) {
       other.position -= delta;
+      int current_row = row(other.position);
+      if (other.object_chain != nullptr && 0 <= current_row && current_row < int(other.chain_size)) {
+        other.object_row = other.object_chain[current_row];
+      }
       return other;
     }
 
@@ -245,24 +285,24 @@ class Deque {
   typedef Iterator<true> const_iterator;
 
   iterator begin() {
-    return Iterator<false>(first_element, chain_array);
+    return Iterator<false>(first_element, chain_array, chain_size);
   }
   iterator end() {
-    return Iterator<false>(first_element + deque_size, chain_array);
+    return Iterator<false>(first_element + deque_size, chain_array, chain_size);
   }
 
   const_iterator begin() const {
-    return Iterator<true>(first_element, chain_array);
+    return Iterator<true>(first_element, chain_array, chain_size);
   }
   const_iterator end() const {
-    return Iterator<true>(first_element + deque_size, chain_array);
+    return Iterator<true>(first_element + deque_size, chain_array, chain_size);
   }
 
   const_iterator cbegin() {
-    return Iterator<true>(first_element, chain_array);
+    return Iterator<true>(first_element, chain_array, chain_size);
   }
   const_iterator cend() {
-    return Iterator<true>(first_element + deque_size, chain_array);
+    return Iterator<true>(first_element + deque_size, chain_array, chain_size);
   }
 
   std::reverse_iterator<iterator> rbegin() {
