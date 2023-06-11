@@ -572,22 +572,11 @@ template <typename Key, typename Value, typename Hash=std::hash<Key>,
 class UnorderedMap {
  public:
   using NodeType = std::pair<Key, Value>;
-  struct Node {
-    NodeType kv;
-    size_t hash;
-    Node(const NodeType& kv, size_t hash) : kv(kv), hash(hash) {}
-    Node(NodeType&& kv, size_t hash) : kv(std::move(kv)), hash(hash) {
-    }
-    Node(const Key& key, const Value& value, size_t hash)
-      : kv(std::make_pair(key, value)), hash(hash) {}
-    Node(Key&& key, Value&& value, size_t hash)
-      : kv(std::make_pair(std::move(key), std::move(value))),
-        hash(hash) {}
-  };
-  using ListType = List<Node, Alloc>;
+
+  using ListType = List<NodeType, Alloc>;
   using ListTypeIterator = typename ListType::iterator;
   using BucketAlloc = typename std::allocator_traits<Alloc>::template rebind_alloc<ListTypeIterator>;
-  using NodeAlloc = typename std::allocator_traits<Alloc>::template rebind_alloc<Node>;
+  using NodeAlloc = typename std::allocator_traits<Alloc>::template rebind_alloc<NodeType>;
 
   template <bool is_constant>
   struct Iterator {
@@ -597,7 +586,7 @@ class UnorderedMap {
     using stor_type = std::conditional<is_constant, const ListTypeIterator*, ListTypeIterator*>;
     using difference_type = ptrdiff_t;
 
-    typename List<Node, Alloc>:: template Iterator<is_constant> it;
+    typename List<NodeType, Alloc>:: template Iterator<is_constant> it;
     
     Iterator() = default;
 
@@ -626,11 +615,11 @@ class UnorderedMap {
     }
 
     reference operator*() const {
-      return (*it).kv;
+      return *it;
     }
 
     pointer operator->() const {
-      return &(it->kv);
+      return &(*it);
     }
 
     Iterator& operator++() {
@@ -787,9 +776,8 @@ class UnorderedMap {
 
     int i = 0;
     for (auto it = main_list_.begin(); it != main_list_.end(); ++it, ++i) {
-      int new_hash = find_hash_(it->kv.first) % bucket_number_;
+      int new_hash = find_hash_(it->first) % bucket_number_;
       table[new_hash].push_back(i);
-      it->hash = new_hash;
       iterators[i] = it;
     }
 
@@ -818,7 +806,7 @@ class UnorderedMap {
   iterator find(const Key& key) {
     size_t current_bucket = find_hash_(key) % bucket_number_;
     auto it = Iterator<false>(buckets_[current_bucket]);
-    while (it != end() && it.it->hash == current_bucket) {
+    while (it != end() && find_hash_(it->first) % bucket_number_ == current_bucket) {
       if (is_equal_(key, it->first)) {
         return it;
       }
@@ -829,7 +817,7 @@ class UnorderedMap {
 
   const_iterator find(const Key& key) const {
     UnorderedMap* temp = this;
-    return find(temp);
+    return find(key);
   }
 
   template <class InputIt>
@@ -914,24 +902,23 @@ class UnorderedMap {
       */
      
       // ------ start of COSTYL ------
-      auto temp = main_list_.AllocNode();
+      // auto temp = main_list_.AllocNode();
 
-      using PairAlloc = typename std::allocator_traits<typename ListType::NodeAlloc>::template rebind_alloc<NodeType>;
-      PairAlloc p_alloc = PairAlloc();
+      // using PairAlloc = typename std::allocator_traits<typename ListType::NodeAlloc>::template rebind_alloc<NodeType>;
+      // PairAlloc p_alloc = PairAlloc();
 
 
-      std::allocator_traits<PairAlloc>::construct(p_alloc, &(temp->value.kv), 
-                  std::forward<Args>(args)...);
+      // std::allocator_traits<PairAlloc>::construct(p_alloc, &(temp->value), 
+      //             std::forward<Args>(args)...);
                 
-      temp->value.hash = 0;
-      main_list_.emplaceForUM(main_list_.begin(), temp);
+      // // temp->value.hash = 0;
+      // main_list_.emplaceForUM(main_list_.begin(), temp);
       // ---- end of COSTYL -------
 
       // this should be a proper line, but it fails
-      // main_list_.emplace(main_list_.begin(), std::forward<Args>(args)..., 0);
+      main_list_.emplace(main_list_.begin(), std::forward<Args>(args)...);
 
-      int bucket_to_insert = find_hash_(main_list_.begin()->kv.first) % bucket_number_;
-      main_list_.begin()->hash = bucket_to_insert;
+      int bucket_to_insert = find_hash_(main_list_.begin()->first) % bucket_number_;
       if (buckets_[bucket_to_insert] == main_list_.end()) {
         buckets_[bucket_to_insert] = main_list_.begin();
       } else {
@@ -970,12 +957,12 @@ class UnorderedMap {
   void erase(const Key& key) {
     size_t current_bucket = find_hash_(key) % bucket_number_;
     auto it = Iterator<true>(buckets_[current_bucket]);
-    while (it != end() && it.it->hash == current_bucket) {
+    while (it != end() && find_hash_(it.it.first) % bucket_number_ == current_bucket) {
       if (is_equal_(key, it->first)) {
         main_list_.erase(it.it);
         ++it;
         buckets_[current_bucket] = it.it;
-        if (it.it->hash != current_bucket) {
+        if (find_hash_(it.it.first) % bucket_number_ != current_bucket) {
           buckets_[current_bucket] = main_list_.end();
         }
         return;
@@ -985,14 +972,14 @@ class UnorderedMap {
   }
 
   void erase(iterator it) {
-    size_t current_bucket = it.it->hash;
+    size_t current_bucket = find_hash_(it->first) % bucket_number_;
     auto next_it = it;
     ++next_it;
     main_list_.erase(it.it);
     it = next_it;
     buckets_[current_bucket] = it.it;
     if (buckets_[current_bucket] == main_list_.end()) { return; }
-    if (it.it->hash != current_bucket) {
+    if (find_hash_(it->first) % bucket_number_ != current_bucket) {
       buckets_[current_bucket] = main_list_.end();
     }
   }
