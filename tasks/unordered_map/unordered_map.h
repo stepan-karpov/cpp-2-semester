@@ -135,6 +135,9 @@ class List {
     Node(const T& value)
         : value(value) {
     }
+    Node(T&& value)
+        : value(std::move(value)) {
+    }
     Node(BaseNode* prev, BaseNode* next)
       : BaseNode(prev, next) {
     }
@@ -904,14 +907,9 @@ class UnorderedMap {
       // ------ start of COSTYL ------
       // auto temp = main_list_.AllocNode();
 
-      // using PairAlloc = typename std::allocator_traits<typename ListType::NodeAlloc>::template rebind_alloc<NodeType>;
-      // PairAlloc p_alloc = PairAlloc();
-
-
-      // std::allocator_traits<PairAlloc>::construct(p_alloc, &(temp->value), 
+      // std::allocator_traits<NodeAlloc>::construct(node_alloc, &(temp->value), 
       //             std::forward<Args>(args)...);
                 
-      // // temp->value.hash = 0;
       // main_list_.emplaceForUM(main_list_.begin(), temp);
       // ---- end of COSTYL -------
 
