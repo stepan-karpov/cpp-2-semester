@@ -3,8 +3,8 @@
 # Прогресс по задачам
 - deque - на ревью
 - list - на ревью
-- unordered_map
 - shared_ptr
+- unordered_map
 - variant
 
 
@@ -14,5 +14,4 @@
 # Команда для проверки на кодстайл
 ```
 clang-format deque.h > a.out; diff a.out deque.h > to_beautify.out; rm a.out
-clang-format unordered_map.h > a.out; diff a.out unordered_map.h > to_beautify.out; rm a.out
 ```
