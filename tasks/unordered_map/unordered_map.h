@@ -309,14 +309,15 @@ class List {
                                                      1);
   }
 
+  // List() = default;
 
-  List(const Alloc& init_allocator)
+  List(const Alloc& init_allocator = Alloc())
       : node_alloc(init_allocator),
         basenode_alloc(init_allocator) {
     InitFakeNode();
   }
 
-  List(int new_capacity = 0, Alloc init_allocator = Alloc())
+  List(int new_capacity, Alloc init_allocator = Alloc())
       : node_alloc(init_allocator),
         basenode_alloc(init_allocator) {
     InitFakeNode();
