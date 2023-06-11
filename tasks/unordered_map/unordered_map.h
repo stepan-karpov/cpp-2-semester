@@ -574,7 +574,7 @@ template <typename Key, typename Value, typename Hash=std::hash<Key>,
           typename Alloc=std::allocator<std::pair<const Key, Value>>>
 class UnorderedMap {
  public:
-  using NodeType = std::pair<Key, Value>;
+  using NodeType = std::pair<const Key, Value>;
 
   using ListType = List<NodeType, Alloc>;
   using ListTypeIterator = typename ListType::iterator;
@@ -818,6 +818,28 @@ class UnorderedMap {
     return end();
   }
 
+   void DebugOutput() {
+    std::cout << buckets_ << "\n";
+    for (int i = 0; i < bucket_number_; ++i) {
+      if (buckets_[i] == main_list_.end()) {
+        std::cout << "end ";
+      } else {
+        std::cout << buckets_[i]->first << " ";
+      }
+    }
+    std::cout << "\n";
+    for (int i = 0; i < bucket_number_; ++i) {
+      std::cout << i << ": ";
+      auto it = Iterator<false>(buckets_[i]);
+      while (it != end() && find_hash_(it->first) % bucket_number_ == i) {
+        std::cout << it->first << " ";
+        ++it;
+      }
+      std::cout << "\n";
+    }
+    std::cout << "\n";
+  }
+
   const_iterator find(const Key& key) const {
     UnorderedMap* temp = this;
     return find(key);
@@ -895,53 +917,22 @@ class UnorderedMap {
   template <typename... Args>
   std::pair<iterator, bool> emplace(Args&&... args) {
     try {
-      /*
-        Yes, this function is very controversial.
-        I've tried to get rid of this poor code, but every time
-        I did so, I had CE on the last test (because somehow a wrong allocator
-        calls a constructor of object)
-        I'm not sure I'll be able to fix it (even on review), so I 
-        really hope that you'll let me keep it
-      */
-     
-      // ------ start of COSTYL ------
-      // auto temp = main_list_.AllocNode();
+      NodeType* node = std::allocator_traits<Alloc>::allocate(pair_allocator_, 1);
+      std::allocator_traits<Alloc>::construct(pair_allocator_, node, std::forward<Args>(args)...);
+      auto& [key, value] = *node;
 
-      // std::allocator_traits<NodeAlloc>::construct(node_alloc, &(temp->value), 
-      //             std::forward<Args>(args)...);
-                
-      // main_list_.emplaceForUM(main_list_.begin(), temp);
-      // ---- end of COSTYL -------
-
-      // this should be a proper line, but it fails
-      main_list_.emplace(main_list_.begin(), std::forward<Args>(args)...);
-
-      int bucket_to_insert = find_hash_(main_list_.begin()->first) % bucket_number_;
+      int bucket_to_insert = find_hash_(key) % bucket_number_;
+      
       if (buckets_[bucket_to_insert] == main_list_.end()) {
+        main_list_.emplace(main_list_.begin(), std::move(const_cast<Key&>(key)), std::move(value));
         buckets_[bucket_to_insert] = main_list_.begin();
       } else {
-        // here you need to change a structure of a list
-        // by tying vertexes
-        // ------- putting iterators on places
-        auto new_begin = main_list_.begin();
-        ++new_begin;
-        auto to_insert = main_list_.begin();
-        auto last_inserted = buckets_[bucket_to_insert];
-        auto vertex_before_last = buckets_[bucket_to_insert];
-        --vertex_before_last;
-        auto root = main_list_.end();
-        // ----
-        if (vertex_before_last != to_insert) {
-          main_list_.ChangeForwardLink(root, new_begin);
-          main_list_.ChangeBackLink(to_insert, vertex_before_last);
-          main_list_.ChangeForwardLink(to_insert, last_inserted);
-          main_list_.ChangeBackLink(new_begin, root);
-          main_list_.ChangeForwardLink(vertex_before_last, to_insert);
-          main_list_.ChangeBackLink(last_inserted, to_insert);
-        }
-
-        buckets_[bucket_to_insert] = to_insert;
+        auto it = buckets_[bucket_to_insert];
+        main_list_.emplace(it, std::move(const_cast<Key&>(key)), std::move(value));
+        --it;
+        buckets_[bucket_to_insert] = it; 
       }
+
       double new_load_factor = double((size() + 1)) / bucket_number_;
       if (new_load_factor >= max_load_factor_ + EPS) {
         rehash(bucket_number_ * 2);
