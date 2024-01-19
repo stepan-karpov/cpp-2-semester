@@ -1,11 +1,10 @@
 # Репозиторий для сдачи заданий по предмету C++
 
 # Прогресс по задачам
-- deque - на ревью
-- list - на ревью
-- shared_ptr
-- unordered_map
-- variant
+- deque - сделано
+- list - сделано
+- shared_ptr - сделано
+- unordered_map - сделано
 
 
 # Полезные ссылки
